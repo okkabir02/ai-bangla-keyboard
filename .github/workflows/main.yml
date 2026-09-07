@@ -9,8 +9,8 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
+      - name: Setup Java 17
+        uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -18,7 +18,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Generate Complete App Code
+      - name: Generate Android Project
         run: |
           mkdir -p app/src/main/java/com/banglacodes/aitranslatorkeyboard
           mkdir -p app/src/main/res/xml
@@ -174,7 +174,7 @@ jobs:
           cat << 'EOF' > app/src/main/res/values/strings.xml
           <resources>
               <string name="app_name">AI Bangla Keyboard</string>
-              <string name="accessibility_desc">স্ক্রিনের বিদেশি মেসেজ বাংলায় দেখতে সার্ভিসটি অন করুন।</string>
+              <string name="accessibility_desc">স্ক্রিনের বিদেশি মেসেজ বাংলায় সরাসরি দেখতে সার্ভিস অন করুন।</string>
           </resources>
           EOF
 
@@ -241,7 +241,7 @@ jobs:
                   layout.addView(title)
 
                   val b1 = Button(this).apply {
-                      text = "১. কিবোর্ড চালু করুন"
+                      text = "১. কিবোর্ড অন করুন"
                       setBackgroundColor(0xFF1E293B.toInt())
                       setTextColor(0xFFFFFFFF.toInt())
                       setOnClickListener { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
@@ -316,7 +316,7 @@ jobs:
                       gravity = Gravity.CENTER_VERTICAL
                   }
                   input = EditText(this).apply {
-                      hint = "বাংলায় টাইপ করুন..."
+                      hint = "বাংলায় লিখুন..."
                       setHintTextColor(0xFF64748B.toInt())
                       setTextColor(0xFFFFFFFF.toInt())
                       textSize = 14f
@@ -346,7 +346,7 @@ jobs:
                   root.addView(topBar)
 
                   status = TextView(this).apply {
-                      text = "বাংলা টাইপিং প্রস্তুত"
+                      text = "বাংলা টাইপিং রেডি"
                       setTextColor(0xFF38BDF8.toInt())
                       textSize = 11f
                       gravity = Gravity.CENTER
@@ -385,9 +385,9 @@ jobs:
                       layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                       weightSum = 10f
                   }
-                  bottom.addView(buildKey("Clear", 2f) { input.setText("") })
+                  bottom.addView(buildKey("মুছুন", 2f) { input.setText("") })
                   bottom.addView(buildKey("Space", 5f) { input.append(" ") })
-                  bottom.addView(buildKey("Direct", 3f) {
+                  bottom.addView(buildKey("সরাসরি", 3f) {
                       currentInputConnection?.commitText(input.text.toString(), 1)
                       input.setText("")
                   })
@@ -453,8 +453,8 @@ jobs:
                       setTextColor(0xFF38BDF8.toInt())
                       setPadding(24, 14, 24, 14)
                       textSize = 13f
-                      text = "🌐 লাইভ অনুবাদ রেডি"
+                      text = "🌐 লাইভ অনুবাদ চালু"
                   }
                   val p = WindowManager.LayoutParams(
                       WindowManager.LayoutParams.WRAP_CONTENT,
-                      WindowManager.Layout
+                      WindowManager.LayoutParams
