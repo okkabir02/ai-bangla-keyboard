@@ -1,4 +1,4 @@
-name: Build AI Bangla Keyboard
+name: Build AI Bangla Keyboard APK
 
 on:
   push:
@@ -9,8 +9,11 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Java 17
-        uses: actions/setup-java@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -18,11 +21,12 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Generate Android Project
+      - name: Create Android Project Files
         run: |
           mkdir -p app/src/main/java/com/banglacodes/aitranslatorkeyboard
           mkdir -p app/src/main/res/xml
           mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
 
           # settings.gradle
           cat << 'EOF' > settings.gradle
@@ -44,7 +48,7 @@ jobs:
           include ':app'
           EOF
 
-          # build.gradle
+          # build.gradle (Project)
           cat << 'EOF' > build.gradle
           plugins {
               id 'com.android.application' version '8.2.2' apply false
@@ -81,6 +85,11 @@ jobs:
               buildTypes {
                   release {
                       minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+                  debug {
+                      applicationIdSuffix ".debug"
+                      debuggable true
                   }
               }
               compileOptions {
@@ -107,6 +116,8 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
               <application
                   android:allowBackup="true"
                   android:icon="@android:drawable/sym_def_app_icon"
@@ -174,37 +185,51 @@ jobs:
           cat << 'EOF' > app/src/main/res/values/strings.xml
           <resources>
               <string name="app_name">AI Bangla Keyboard</string>
-              <string name="accessibility_desc">স্ক্রিনের বিদেশি মেসেজ বাংলায় সরাসরি দেখতে সার্ভিস অন করুন।</string>
+              <string name="accessibility_desc">স্ক্রিনের বিদেশি মেসেজ বাংলায় দেখতে সার্ভিসটি অন করুন।</string>
           </resources>
           EOF
 
           # TranslationHelper.kt
           cat << 'EOF' > app/src/main/java/com/banglacodes/aitranslatorkeyboard/TranslationHelper.kt
           package com.banglacodes.aitranslatorkeyboard
+
           import kotlinx.coroutines.Dispatchers
           import kotlinx.coroutines.withContext
           import okhttp3.OkHttpClient
           import okhttp3.Request
           import org.json.JSONArray
           import java.net.URLEncoder
+          import java.util.concurrent.TimeUnit
 
           object TranslationHelper {
-              private val client = OkHttpClient()
-              suspend fun translate(text: String, sl: String, tl: String): String {
+              private val client = OkHttpClient.Builder()
+                  .connectTimeout(10, TimeUnit.SECONDS)
+                  .readTimeout(10, TimeUnit.SECONDS)
+                  .build()
+
+              suspend fun translate(text: String, sl: String = "auto", tl: String = "en"): String {
+                  if (text.isBlank()) return ""
                   return withContext(Dispatchers.IO) {
                       try {
                           val q = URLEncoder.encode(text, "UTF-8")
                           val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=$sl&tl=$tl&dt=t&q=$q"
-                          val req = Request.Builder().url(url).build()
+                          val req = Request.Builder()
+                              .url(url)
+                              .header("User-Agent", "Mozilla/5.0")
+                              .build()
                           val res = client.newCall(req).execute()
-                          val json = JSONArray(res.body?.string() ?: return@withContext text)
+                          val bodyString = res.body?.string() ?: return@withContext text
+                          val json = JSONArray(bodyString)
                           val arr = json.getJSONArray(0)
                           val sb = StringBuilder()
                           for (i in 0 until arr.length()) {
                               sb.append(arr.getJSONArray(i).getString(0))
                           }
-                          sb.toString()
-                      } catch (e: Exception) { text }
+                          val result = sb.toString()
+                          if (result.isNotBlank()) result else text
+                      } catch (e: Exception) {
+                          text
+                      }
                   }
               }
           }
@@ -213,35 +238,53 @@ jobs:
           # MainActivity.kt
           cat << 'EOF' > app/src/main/java/com/banglacodes/aitranslatorkeyboard/MainActivity.kt
           package com.banglacodes.aitranslatorkeyboard
+
           import android.content.Intent
           import android.net.Uri
           import android.os.Build
           import android.os.Bundle
           import android.provider.Settings
+          import android.view.Gravity
           import android.view.inputmethod.InputMethodManager
           import android.widget.Button
+          import android.widget.EditText
           import android.widget.LinearLayout
+          import android.widget.ScrollView
           import android.widget.TextView
           import androidx.appcompat.app.AppCompatActivity
 
           class MainActivity : AppCompatActivity() {
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
+
+                  val scroll = ScrollView(this).apply {
+                      setBackgroundColor(0xFF0F172A.toInt())
+                  }
+
                   val layout = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
-                      setBackgroundColor(0xFF0F172A.toInt())
-                      setPadding(40, 60, 40, 40)
+                      setPadding(40, 60, 40, 60)
                   }
+                  scroll.addView(layout)
+
                   val title = TextView(this).apply {
                       text = "✨ AI Bangla Keyboard Setup"
-                      textSize = 20f
+                      textSize = 22f
                       setTextColor(0xFF38BDF8.toInt())
-                      setPadding(0, 0, 0, 30)
+                      setPadding(0, 0, 0, 10)
                   }
                   layout.addView(title)
 
+                  val subtitle = TextView(this).apply {
+                      text = "বাংলা টাইপিং ও স্ক্রিন অনুবাদ সক্রিয় করতে নিচের ধাপগুলো সম্পূর্ণ করুন:"
+                      textSize = 14f
+                      setTextColor(0xFF94A3B8.toInt())
+                      setPadding(0, 0, 0, 40)
+                  }
+                  layout.addView(subtitle)
+
                   val b1 = Button(this).apply {
-                      text = "১. কিবোর্ড অন করুন"
+                      text = "১. কিবোর্ড চালু করুন (Enable)"
                       setBackgroundColor(0xFF1E293B.toInt())
                       setTextColor(0xFFFFFFFF.toInt())
                       setOnClickListener { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
@@ -249,7 +292,7 @@ jobs:
                   layout.addView(b1)
 
                   val b2 = Button(this).apply {
-                      text = "২. কিবোর্ড সিলেক্ট করুন"
+                      text = "২. কিবোর্ড সিলেক্ট করুন (Select Default)"
                       setBackgroundColor(0xFF1E293B.toInt())
                       setTextColor(0xFFFFFFFF.toInt())
                       setOnClickListener {
@@ -277,7 +320,26 @@ jobs:
                       }
                       layout.addView(b4)
                   }
-                  setContentView(layout)
+
+                  // Live test field
+                  val testTitle = TextView(this).apply {
+                      text = "\n⌨️ এখানে টাইপ করে কিবোর্ড পরীক্ষা করুন:"
+                      setTextColor(0xFFE2E8F0.toInt())
+                      textSize = 15f
+                      setPadding(0, 30, 0, 10)
+                  }
+                  layout.addView(testTitle)
+
+                  val testInput = EditText(this).apply {
+                      hint = "এখানে ক্লিক করুন..."
+                      setHintTextColor(0xFF64748B.toInt())
+                      setTextColor(0xFFFFFFFF.toInt())
+                      setBackgroundColor(0xFF1E293B.toInt())
+                      setPadding(30, 24, 30, 24)
+                  }
+                  layout.addView(testInput)
+
+                  setContentView(scroll)
               }
           }
           EOF
@@ -285,12 +347,14 @@ jobs:
           # KeyboardService.kt
           cat << 'EOF' > app/src/main/java/com/banglacodes/aitranslatorkeyboard/KeyboardService.kt
           package com.banglacodes.aitranslatorkeyboard
+
           import android.inputmethodservice.InputMethodService
           import android.view.Gravity
           import android.view.View
           import android.view.ViewGroup
           import android.widget.Button
           import android.widget.EditText
+          import android.widget.HorizontalScrollView
           import android.widget.LinearLayout
           import android.widget.TextView
           import kotlinx.coroutines.CoroutineScope
@@ -300,28 +364,32 @@ jobs:
 
           class KeyboardService : InputMethodService() {
               private val scope = CoroutineScope(Dispatchers.Main)
+              private var isBanglaMode = true
               private var isCaps = false
               private lateinit var input: EditText
               private lateinit var status: TextView
+              private lateinit var keyboardContainer: LinearLayout
 
               override fun onCreateInputView(): View {
                   val root = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       setBackgroundColor(0xFF0F172A.toInt())
-                      setPadding(6, 6, 6, 10)
+                      setPadding(8, 8, 8, 12)
                       layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                   }
+
+                  // Top Smart Action Bar
                   val topBar = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER_VERTICAL
                   }
                   input = EditText(this).apply {
-                      hint = "বাংলায় লিখুন..."
+                      hint = "বাংলায় টাইপ করুন..."
                       setHintTextColor(0xFF64748B.toInt())
                       setTextColor(0xFFFFFFFF.toInt())
-                      textSize = 14f
+                      textSize = 15f
                       setBackgroundColor(0xFF1E293B.toInt())
-                      setPadding(14, 10, 14, 10)
+                      setPadding(16, 12, 16, 12)
                       layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                   }
                   val sendBtn = Button(this).apply {
@@ -331,12 +399,12 @@ jobs:
                       setOnClickListener {
                           val txt = input.text.toString().trim()
                           if (txt.isNotEmpty()) {
-                              status.text = "অনুবাদ হচ্ছে..."
+                              status.text = "AI অনুবাদ হচ্ছে..."
                               scope.launch {
                                   val en = TranslationHelper.translate(txt, "bn", "en")
                                   currentInputConnection?.commitText(en, 1)
                                   input.setText("")
-                                  status.text = "পাঠানো হয়েছে!"
+                                  status.text = "সরাসরি ইংরেজিতে পাঠানো হয়েছে!"
                               }
                           }
                       }
@@ -346,115 +414,57 @@ jobs:
                   root.addView(topBar)
 
                   status = TextView(this).apply {
-                      text = "বাংলা টাইপিং রেডি"
+                      text = "AI বাংলা কিবোর্ড প্রস্তুত"
                       setTextColor(0xFF38BDF8.toInt())
-                      textSize = 11f
+                      textSize = 12f
                       gravity = Gravity.CENTER
+                      setPadding(0, 6, 0, 6)
                   }
                   root.addView(status)
 
-                  val r1 = listOf("Q","W","E","R","T","Y","U","I","O","P")
-                  val r2 = listOf("A","S","D","F","G","H","J","K","L")
-                  val r3 = listOf("Z","X","C","V","B","N","M")
-
-                  root.addView(buildRow(r1))
-                  root.addView(buildRow(r2))
-
-                  val row3Layout = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
+                  keyboardContainer = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
                       layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                      weightSum = 10f
                   }
-                  row3Layout.addView(buildKey("⇧", 1.5f) { isCaps = !isCaps })
-                  for (k in r3) {
-                      row3Layout.addView(buildKey(k, 1f) {
-                          input.append(if (isCaps) k else k.lowercase(Locale.ROOT))
-                      })
-                  }
-                  row3Layout.addView(buildKey("⌫", 1.5f) {
-                      val cur = input.text.toString()
-                      if (cur.isNotEmpty()) {
-                          input.setText(cur.substring(0, cur.length - 1))
-                          input.setSelection(input.text.length)
-                      }
-                  })
-                  root.addView(row3Layout)
+                  root.addView(keyboardContainer)
 
-                  val bottom = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                      weightSum = 10f
-                  }
-                  bottom.addView(buildKey("মুছুন", 2f) { input.setText("") })
-                  bottom.addView(buildKey("Space", 5f) { input.append(" ") })
-                  bottom.addView(buildKey("সরাসরি", 3f) {
-                      currentInputConnection?.commitText(input.text.toString(), 1)
-                      input.setText("")
-                  })
-                  root.addView(bottom)
+                  renderKeypad()
                   return root
               }
 
-              private fun buildRow(keys: List<String>): LinearLayout {
-                  val row = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                      weightSum = keys.size.toFloat()
-                  }
-                  for (k in keys) {
-                      row.addView(buildKey(k, 1f) {
-                          input.append(if (isCaps) k else k.lowercase(Locale.ROOT))
-                      })
-                  }
-                  return row
-              }
+              private fun renderKeypad() {
+                  keyboardContainer.removeAllViews()
 
-              private fun buildKey(txt: String, w: Float, action: () -> Unit): Button {
-                  return Button(this).apply {
-                      text = txt
-                      textSize = 13f
-                      setTextColor(0xFFFFFFFF.toInt())
-                      setBackgroundColor(0xFF334155.toInt())
-                      layoutParams = LinearLayout.LayoutParams(0, 110, w).apply {
-                          setMargins(2, 2, 2, 2)
+                  if (isBanglaMode) {
+                      // Kar bar
+                      val karBar = HorizontalScrollView(this)
+                      val karLayout = LinearLayout(this).apply {
+                          orientation = LinearLayout.HORIZONTAL
+                          setPadding(0, 4, 0, 6)
                       }
-                      setPadding(0, 0, 0, 0)
-                      setOnClickListener { action() }
-                  }
-              }
-          }
-          EOF
+                      val kars = listOf("া","ি","ী","ু","ূ","ৃ","ে","ৈ","ো","ৌ","্","ৎ","ং","ঃ","ঁ")
+                      for (k in kars) {
+                          karLayout.addView(buildKey(k, 1f) { input.append(k) })
+                      }
+                      karBar.addView(karLayout)
+                      keyboardContainer.addView(karBar)
 
-          # ChatOverlayService.kt
-          cat << 'EOF' > app/src/main/java/com/banglacodes/aitranslatorkeyboard/ChatOverlayService.kt
-          package com.banglacodes.aitranslatorkeyboard
-          import android.accessibilityservice.AccessibilityService
-          import android.graphics.PixelFormat
-          import android.view.Gravity
-          import android.view.WindowManager
-          import android.view.accessibility.AccessibilityEvent
-          import android.view.accessibility.AccessibilityNodeInfo
-          import android.widget.TextView
-          import kotlinx.coroutines.CoroutineScope
-          import kotlinx.coroutines.Dispatchers
-          import kotlinx.coroutines.launch
+                      val b1 = listOf("ক","খ","গ","ঘ","ঙ","চ","ছ","জ","ঝ","ঞ")
+                      val b2 = listOf("ট","ঠ","ড","ঢ","ণ","ত","থ","দ","ধ","ন")
+                      val b3 = listOf("প","ফ","ব","ভ","ম","য","র","ল","শ","ষ")
+                      val b4 = listOf("স","হ","ড়","ঢ়","য়","অ","আ","ই","উ","এ")
 
-          class ChatOverlayService : AccessibilityService() {
-              private val scope = CoroutineScope(Dispatchers.Main)
-              private var wm: WindowManager? = null
-              private var view: TextView? = null
-              private var last = ""
+                      keyboardContainer.addView(buildRow(b1))
+                      keyboardContainer.addView(buildRow(b2))
+                      keyboardContainer.addView(buildRow(b3))
 
-              override fun onServiceConnected() {
-                  super.onServiceConnected()
-                  wm = getSystemService(WINDOW_SERVICE) as WindowManager
-                  view = TextView(this).apply {
-                      setBackgroundColor(0xEE0F172A.toInt())
-                      setTextColor(0xFF38BDF8.toInt())
-                      setPadding(24, 14, 24, 14)
-                      textSize = 13f
-                      text = "🌐 লাইভ অনুবাদ চালু"
-                  }
-                  val p = WindowManager.LayoutParams(
-                      WindowManager.LayoutParams.WRAP_CONTENT,
-                      WindowManager.LayoutParams
+                      val r4 = LinearLayout(this).apply {
+                          orientation = LinearLayout.HORIZONTAL
+                          layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                          weightSum = 10f
+                      }
+                      r4.addView(buildKey("⌫", 1.5f) { deleteChar() })
+                      for (k in b4.take(7)) {
+                          r4.addView(buildKey(k, 1f) { input.append(k) })
+                      }
+                      r4
